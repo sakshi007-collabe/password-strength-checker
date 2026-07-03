@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Password Strength Checker</title>
+
+<style>
+  /* ==========================================================
+     DESIGN TOKENS
+     A "security scanner" theme: deep navy/charcoal background,
+     monospace input (like a terminal), and a segmented LED-style
+     strength meter as the signature element.
+     ========================================================== */
+  :root{
+    --bg:            #0F1420;   /* page background */
+    --panel:         #161C2C;  /* card background */
+    --panel-border:  #262E44;  /* subtle border */
+    --text:          #E4E8F1;  /* main text */
+    --muted:         #7A8399;  /* secondary text */
+    --accent:        #6C63FF; /* focus / interactive accent */
+    --weak:          #EF4444; /* red */
+    --medium:        #F0B429; /* amber */
+    --strong:        #3ECF8E; /* green */
+    --font-display:  'Space Grotesk', 'Segoe UI', sans-serif;
+    --font-body:     'Inter', 'Segoe UI', sans-serif;
+    --font-mono:     'JetBrains Mono', 'Courier New', monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  body{
+    margin:0;
+    min-height:100vh;
+    background:
+      radial-gradient(circle at 20% -10%, rgba(108,99,255,0.15), transparent 40%),
+      var(--bg);
+    color:var(--text);
+    font-family:var(--font-body);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:24px;
+  }
+
+  /* ---------- Card ---------- */
+  .card{
+    width:100%;
+    max-width:480px;
+    background:var(--panel);
+    border:1px solid var(--panel-border);
+    border-radius:16px;
+    padding:32px;
+    box-shadow:0 20px 60px rgba(0,0,0,0.45);
+  }
+
+  .eyebrow{
+    font-family:var(--font-mono);
+    font-size:12px;
+    letter-spacing:0.12em;
+    text-transform:uppercase;
+    color:var(--muted);
+    margin:0 0 6px;
+  }
+
+  h1{
+    font-family:var(--font-display);
+    font-size:26px;
+    margin:0 0 6px;
+    font-weight:600;
+  }
+
+  .sub{
+    color:var(--muted);
+    font-size:14px;
+    margin:0 0 24px;
+    line-height:1.5;
+  }
+
+  /* ---------- Password input ---------- */
+  .field{
+    position:relative;
+    margin-bottom:18px;
+  }
+
+  #password{
+    width:100%;
+    padding:14px 46px 14px 14px;
+    background:#0B0F19;
+    border:1px solid var(--panel-border);
+    border-radius:10px;
+    color:var(--text);
+    font-family:var(--font-mono);
+    font-size:15px;
+    letter-spacing:0.03em;
+    outline:none;
+    transition:border-color 0.2s, box-shadow 0.2s;
+  }
+
+  #password:focus{
+    border-color:var(--accent);
+    box-shadow:0 0 0 3px rgba(108,99,255,0.25);
+  }
+
+  .toggle-btn{
+    position:absolute;
+    right:8px;
+    top:50%;
+    transform:translateY(-50%);
+    background:none;
+    border:none;
+    color:var(--muted);
+    cursor:pointer;
+    font-size:13px;
+    font-family:var(--font-body);
+    padding:6px 8px;
+    border-radius:6px;
+    transition:color 0.2s, background 0.2s;
+  }
+
+  .toggle-btn:hover{
+    color:var(--text);
+    background:rgba(255,255,255,0.06);
+  }
+
+  /* ---------- Segmented strength meter (signature element) ---------- */
+  .meter-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-bottom:6px;
+  }
+
+  .meter-label{
+    font-family:var(--font-mono);
+    font-size:12px;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    color:var(--muted);
+  }
+
+  .meter-value{
+    font-family:var(--font-mono);
+    font-size:13px;
+    font-weight:600;
+  }
+
+  .segments{
+    display:flex;
+    gap:4px;
+    margin-bottom:20px;
+  }
+
+  .segment{
+    flex:1;
+    height:8px;
+    border-radius:4px;
+    background:#232A3E;
+    transition:background 0.25s ease, box-shadow 0.25s ease;
+  }
+
+  .segment.lit-weak   { background:var(--weak);   box-shadow:0 0 8px rgba(239,68,68,0.6); }
+  .segment.lit-medium { background:var(--medium); box-shadow:0 0 8px rgba(240,180,41,0.6); }
+  .segment.lit-strong { background:var(--strong); box-shadow:0 0 8px rgba(62,207,142,0.6); }
+
+  .strength-tag{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    font-family:var(--font-mono);
+    font-size:12px;
+    font-weight:600;
+    padding:4px 10px;
+    border-radius:999px;
+    margin-bottom:20px;
+  }
+
+  .tag-weak   { color:var(--weak);   background:rgba(239,68,68,0.12); }
+  .tag-medium { color:var(--medium); background:rgba(240,180,41,0.12); }
+  .tag-strong { color:var(--strong); background:rgba(62,207,142,0.12); }
+  .tag-empty  { color:var(--muted);  background:rgba(122,131,153,0.12); }
+
+  /* ---------- Checklist ---------- */
+  .checklist{
+    list-style:none;
+    margin:0 0 20px;
+    padding:0;
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:8px;
+  }
+
+  .checklist li{
+    font-size:13px;
+    display:flex;
+    align-items:center;
+    gap:8px;
+    color:var(--muted);
+    transition:color 0.2s;
+  }
+
+  .checklist li.ok{ color:var(--text); }
+
+  .check-icon{
+    width:16px;
+    height:16px;
+    flex-shrink:0;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    border-radius:50%;
+    font-size:10px;
+    font-weight:700;
+    background:#232A3E;
+    color:var(--muted);
+  }
+
+  .checklist li.ok .check-icon{
+    background:rgba(62,207,142,0.18);
+    color:var(--strong);
+  }
+
+  /* ---------- Suggestions ---------- */
+  .suggestions{
+    background:#0B0F19;
+    border:1px solid var(--panel-border);
+    border-radius:10px;
+    padding:14px 16px;
+    font-size:13px;
+    color:var(--muted);
+    line-height:1.6;
+  }
+
+  .suggestions strong{
+    color:var(--text);
+    display:block;
+    margin-bottom:6px;
+    font-family:var(--font-mono);
+    font-size:12px;
+    letter-spacing:0.06em;
+    text-transform:uppercase;
+  }
+
+  .suggestions ul{
+    margin:0;
+    padding-left:18px;
+  }
+
+  .suggestions.hidden{ display:none; }
+
+  /* ---------- Responsive ---------- */
+  @media (max-width:420px){
+    .card{ padding:24px 20px; }
+    .checklist{ grid-template-columns:1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <p class="eyebrow">// security check</p>
+  <h1>Password Strength Checker</h1>
+  <p class="sub">Type a password below. Everything is checked live, right here in your browser — nothing is sent anywhere.</p>
+
+  <!-- Password field with show/hide toggle -->
+  <div class="field">
+    <input type="password" id="password" placeholder="Enter your password" autocomplete="off" />
+    <button type="button" class="toggle-btn" id="toggleBtn">Show</button>
+  </div>
+
+  <!-- Segmented strength meter -->
+  <div class="meter-row">
+    <span class="meter-label">Strength</span>
+    <span class="meter-value" id="percentText">0%</span>
+  </div>
+  <div class="segments" id="segments">
+    <div class="segment"></div>
+    <div class="segment"></div>
+    <div class="segment"></div>
+    <div class="segment"></div>
+    <div class="segment"></div>
+  </div>
+
+  <span class="strength-tag tag-empty" id="strengthTag">Enter a password</span>
+
+  <!-- Checklist of requirements -->
+  <ul class="checklist" id="checklist">
+    <li id="chk-length"><span class="check-icon">✗</span> 8+ characters</li>
+    <li id="chk-upper"><span class="check-icon">✗</span> Uppercase letter</li>
+    <li id="chk-lower"><span class="check-icon">✗</span> Lowercase letter</li>
+    <li id="chk-digit"><span class="check-icon">✗</span> Number</li>
+    <li id="chk-special"><span class="check-icon">✗</span> Special character</li>
+    <li id="chk-longlength"><span class="check-icon">✗</span> 12+ characters (bonus)</li>
+  </ul>
+
+  <!-- Suggestions box -->
+  <div class="suggestions hidden" id="suggestionsBox">
+    <strong>How to improve</strong>
+    <ul id="suggestionsList"></ul>
+  </div>
+</div>
+
+<script>
+/* ===========================================================
+   PASSWORD STRENGTH CHECKER — LOGIC
+   Beginner-friendly, commented step by step.
+   =========================================================== */
+
+// 1. Grab references to all the HTML elements we need to update.
+const passwordInput   = document.getElementById('password');
+const toggleBtn        = document.getElementById('toggleBtn');
+const segments         = document.querySelectorAll('.segment');
+const percentText      = document.getElementById('percentText');
+const strengthTag      = document.getElementById('strengthTag');
+const suggestionsBox   = document.getElementById('suggestionsBox');
+const suggestionsList  = document.getElementById('suggestionsList');
+
+// 2. Define the regular expressions used to test each character type.
+//    A regex (regular expression) is just a pattern used to search text.
+const regexUpper   = /[A-Z]/;                              // at least one uppercase letter
+const regexLower   = /[a-z]/;                               // at least one lowercase letter
+const regexDigit   = /[0-9]/;                                // at least one digit
+const regexSpecial = /[@#$%&*!?_\-+=^()[\]{}:;,.<>/\\|~]/;   // at least one allowed special character
+
+// 3. Show/Hide password toggle.
+toggleBtn.addEventListener('click', () => {
+  const isHidden = passwordInput.type === 'password';
+  passwordInput.type = isHidden ? 'text' : 'password';
+  toggleBtn.textContent = isHidden ? 'Hide' : 'Show';
+});
+
+// 4. Main function: runs every time the user types.
+function checkPassword() {
+  const value = passwordInput.value;
+
+  // --- 4a. Run each rule against the current password ---
+  const rules = {
+    length:     value.length >= 8,
+    longLength: value.length >= 12,
+    upper:      regexUpper.test(value),
+    lower:      regexLower.test(value),
+    digit:      regexDigit.test(value),
+    special:    regexSpecial.test(value)
+  };
+
+  // Update the ✓ / ✗ checklist in the UI
+  updateChecklistItem('chk-length',     rules.length);
+  updateChecklistItem('chk-upper',      rules.upper);
+  updateChecklistItem('chk-lower',      rules.lower);
+  updateChecklistItem('chk-digit',      rules.digit);
+  updateChecklistItem('chk-special',    rules.special);
+  updateChecklistItem('chk-longlength', rules.longLength);
+
+  // --- 4b. Count how many of the 4 core character types are present ---
+  const typeCount = [rules.upper, rules.lower, rules.digit, rules.special]
+                      .filter(Boolean).length;
+
+  // --- 4c. Calculate a 0-100 score ---
+  //     20 points for each character type present (max 80)
+  //   + 10 points for meeting the 8-character minimum
+  //   + 10 points bonus for reaching 12+ characters
+  let score = 0;
+  if (value.length > 0) {
+    score += (rules.upper   ? 20 : 0);
+    score += (rules.lower   ? 20 : 0);
+    score += (rules.digit   ? 20 : 0);
+    score += (rules.special ? 20 : 0);
+    score += (rules.length  ? 10 : 0);
+    score += (rules.longLength ? 10 : 0);
+  }
+
+  // --- 4d. Decide the strength label using the assignment's rules ---
+  let label = 'empty';
+  if (value.length === 0) {
+    label = 'empty';
+  } else if (!rules.length || typeCount <= 1) {
+    label = 'weak';                       // too short, or only one character type
+  } else if (rules.length && typeCount === 4) {
+    label = 'strong';                     // all four types + minimum length
+  } else {
+    label = 'medium';                     // 8+ chars with 2-3 character types
+  }
+
+  // --- 4e. Update the percentage text ---
+  percentText.textContent = value.length === 0 ? '0%' : score + '%';
+
+  // --- 4f. Update the segmented strength meter (5 LED-style bars) ---
+  const litCount = value.length === 0 ? 0 : Math.max(1, Math.ceil((score / 100) * 5));
+  segments.forEach((seg, i) => {
+    seg.className = 'segment'; // reset
+    if (i < litCount) {
+      if (label === 'weak')   seg.classList.add('lit-weak');
+      if (label === 'medium') seg.classList.add('lit-medium');
+      if (label === 'strong') seg.classList.add('lit-strong');
+    }
+  });
+
+  // --- 4g. Update the strength tag pill ---
+  strengthTag.className = 'strength-tag';
+  if (label === 'empty') {
+    strengthTag.classList.add('tag-empty');
+    strengthTag.textContent = 'Enter a password';
+  } else if (label === 'weak') {
+    strengthTag.classList.add('tag-weak');
+    strengthTag.textContent = '🔴 Weak';
+  } else if (label === 'medium') {
+    strengthTag.classList.add('tag-medium');
+    strengthTag.textContent = '🟡 Medium';
+  } else {
+    strengthTag.classList.add('tag-strong');
+    strengthTag.textContent = '🟢 Strong';
+  }
+
+  // --- 4h. Build helpful suggestions for anything not yet met ---
+  const tips = [];
+  if (!rules.length)  tips.push('Use at least 8 characters.');
+  if (!rules.upper)   tips.push('Add an uppercase letter (A-Z).');
+  if (!rules.lower)   tips.push('Add a lowercase letter (a-z).');
+  if (!rules.digit)   tips.push('Add a number (0-9).');
+  if (!rules.special) tips.push('Add a special character, e.g. @ # $ % & *');
+  if (rules.length && typeCount === 4 && !rules.longLength) {
+    tips.push('Great job! Go 12+ characters for an even stronger password.');
+  }
+
+  if (value.length === 0 || tips.length === 0) {
+    suggestionsBox.classList.add('hidden');
+  } else {
+    suggestionsBox.classList.remove('hidden');
+    suggestionsList.innerHTML = tips.map(t => `<li>${t}</li>`).join('');
+  }
+}
+
+// Helper: flips a checklist row between "met" (✓) and "not met" (✗)
+function updateChecklistItem(id, isMet) {
+  const item = document.getElementById(id);
+  const icon = item.querySelector('.check-icon');
+  item.classList.toggle('ok', isMet);
+  icon.textContent = isMet ? '✓' : '✗';
+}
+
+// 5. Run the check live, every time the user types (real-time validation).
+passwordInput.addEventListener('input', checkPassword);
+
+// 6. Run once on page load so the UI starts in a clean, correct state.
+checkPassword();
+</script>
+</body>
+</html>
